@@ -5,7 +5,9 @@
 // @description  Unlocks locked google forms, the user is responsible for all actions that is made by this script
 // @author       Connor M
 // @match       *://docs.google.com/forms/*
-// @grant        none
+// @grant       GM_addStyle
+// @run-at		document-start
+// @license     GPL-3.0
 // @updateURL    https://github.com/Spartan370/GFU/raw/main/GFU.js
 // @downloadURL  https://github.com/Spartan370/GFU/raw/main/GFU.js
 // ==/UserScript==
@@ -276,4 +278,4 @@ unsafeWindow.document.addEventListener = function() {
 	}
 
 	return oldAddEventListener.apply(this, arguments)
-} 
+}
