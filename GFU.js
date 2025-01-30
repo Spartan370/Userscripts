@@ -1,16 +1,13 @@
 // ==UserScript==
-// @name        Google Forms Unlocker
-// @namespace   https://github.com/xNasuni/google-forms-unlocker
-// @description Stops Google Forms from being locked, consequently letting you do them without a chromebook.
-// @author      Mia @ github.com/xNasuni
+// @name         GFU
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  Unlocks locked google forms, the user is responsible for all actions that is made by this script
+// @author       Connor M
 // @match       *://docs.google.com/forms/*
-// @grant       GM_addStyle
-// @version     1.7
-// @run-at		document-start
-// @license     GPL-3.0
-// @supportURL  https://github.com/xNasuni/google-forms-unlocker/issues
-// @downloadURL https://update.greasyfork.org/scripts/518667/Google%20Forms%20Unlocker.user.js
-// @updateURL https://update.greasyfork.org/scripts/518667/Google%20Forms%20Unlocker.meta.js
+// @grant        none
+// @updateURL    https://github.com/Spartan370/GFU/raw/main/GFU.js
+// @downloadURL  https://github.com/Spartan370/GFU/raw/main/GFU.js
 // ==/UserScript==
 
 const kAssessmentAssistantExtensionId = "gndmhdcefbhlchkhipcnnbkcmicncehk"
