@@ -196,7 +196,7 @@
             <div class="clicker-header">
                 <div class="title-section">
                     <div class="clicker-title">Auto Clicker Elite</div>
-                    <a class="info-icon" href="https://github.com/yourusername/autoclicker" target="_blank" title="View Documentation">ⓘ</a>
+                    <a class="info-icon" href="https://github.com/Spartan370/Userscripts/tree/main" target="_blank" title="View Documentation">ⓘ</a>
                 </div>
                 <div class="header-controls">
                     <button class="header-button minimize">─</button>
