@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      3.4
 // @description  Professional autoclicker with minimalist design
-// @author       Cody
+// @author       Connor M
 // @match        *://*/*
 // @grant        none
 // ==/UserScript==
