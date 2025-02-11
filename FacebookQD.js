@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      2.0.0
 // @description  Advanced Facebook photo downloader with sequential naming
-// @author       Cody
+// @author       Connor M
 // @match        https://*.facebook.com/*
 // @match        https://*.facebook.com
 // @match        https://www.facebook.com/photo/
