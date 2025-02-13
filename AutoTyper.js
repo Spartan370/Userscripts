@@ -1,560 +1,299 @@
 // ==UserScript==
-// @name         Auto Typer Elite Professional
+// @name         Human-Typer (Automatic) - Google Docs & Slides
 // @namespace    http://tampermonkey.net/
-// @version      8.0
-// @description  Enterprise-grade typing automation with advanced security and optimization
-// @author       You
-// @match        *://*/*
-// @match        *://docs.google.com/*
-// @match        *://slides.google.com/*
-// @match        *://sheets.google.com/*
-// @grant        GM_addStyle
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        GM_registerMenuCommand
-// @run-at       document-end
+// @version      1.2
+// @description  Types your text in a human-like manner so the edit history shows the progress. https://greasyfork.org/en/users/449798-ace-dx
+// @author       ∫(Ace)³dx
+// @match        https://docs.google.com/*
+// @icon         https://i.imgur.com/z2gxKWZ.png
+// @grant        none
+// @license MIT
+// @downloadURL https://update.greasyfork.org/scripts/474038/Human-Typer%20%28Automatic%29%20-%20Google%20Docs%20%20Slides.user.js
+// @updateURL https://update.greasyfork.org/scripts/474038/Human-Typer%20%28Automatic%29%20-%20Google%20Docs%20%20Slides.meta.js
 // ==/UserScript==
 
-(function() {
-    'use strict';
+if (window.location.href.includes("docs.google.com/document/d") || window.location.href.includes("docs.google.com/presentation/d")) {
+    console.log("Document opened, Human-Typer available!");
 
-    const TYPING_SPEEDS = Object.freeze({
-        SLOW: 1,
-        NORMAL: 5,
-        FAST: 10
-    });
+    const humanTyperButton = document.createElement("div");
+    humanTyperButton.textContent = "Human-Typer";
+    humanTyperButton.classList.add("menu-button", "goog-control", "goog-inline-block");
+    humanTyperButton.style.userSelect = "none";
+    humanTyperButton.setAttribute("aria-haspopup", "true");
+    humanTyperButton.setAttribute("aria-expanded", "false");
+    humanTyperButton.setAttribute("aria-disabled", "false");
+    humanTyperButton.setAttribute("role", "menuitem");
+    humanTyperButton.id = "human-typer-button";
+    humanTyperButton.style.transition = "all 0.3s ease";
+    humanTyperButton.style.padding = "8px 16px";
+    humanTyperButton.style.borderRadius = "6px";
+    humanTyperButton.style.cursor = "pointer";
 
-    const MAX_RETRY_ATTEMPTS = 3;
-    const TYPING_TIMEOUT = 30000;
-    const MIN_DELAY = 30;
-    const MAX_DELAY = 300;
+    const stopButton = document.createElement("div");
+    stopButton.textContent = "Stop";
+    stopButton.classList.add("menu-button", "goog-control", "goog-inline-block");
+    stopButton.style.userSelect = "none";
+    stopButton.style.color = "#ff4444";
+    stopButton.style.cursor = "pointer";
+    stopButton.style.transition = "all 0.3s ease";
+    stopButton.style.padding = "8px 16px";
+    stopButton.style.borderRadius = "6px";
+    stopButton.id = "stop-button";
+    stopButton.style.display = "none";
 
-    let isTyping = false;
-    let selectedElement = null;
-    let isSelectorMode = false;
-    let typingTimeout = null;
-    let retryCount = 0;
+    const helpMenu = document.getElementById("docs-help-menu");
+    helpMenu.parentNode.insertBefore(humanTyperButton, helpMenu);
+    humanTyperButton.parentNode.insertBefore(stopButton, humanTyperButton.nextSibling);
 
-    const safeCreateElement = (tag, attributes = {}) => {
-        const element = document.createElement(tag);
-        Object.entries(attributes).forEach(([key, value]) => {
-            if (typeof value === 'function') {
-                element.addEventListener(key.replace('on', ''), value);
-            } else {
-                element.setAttribute(key, value);
-            }
+    let cancelTyping = false;
+    let typingInProgress = false;
+    let lowerBoundValue = 60;
+    let upperBoundValue = 140;
+
+    function showOverlay() {
+        const overlay = document.createElement("div");
+        overlay.style.position = "fixed";
+        overlay.style.top = "50%";
+        overlay.style.left = "50%";
+        overlay.style.transform = "translate(-50%, -50%)";
+        overlay.style.backgroundColor = "#2d2d2d";
+        overlay.style.padding = "25px";
+        overlay.style.borderRadius = "12px";
+        overlay.style.boxShadow = "0 4px 20px rgba(0, 0, 0, 0.3)";
+        overlay.style.zIndex = "9999";
+        overlay.style.display = "flex";
+        overlay.style.flexDirection = "column";
+        overlay.style.alignItems = "center";
+        overlay.style.width = "380px";
+        overlay.style.color = "#ffffff";
+
+        const textField = document.createElement("textarea");
+        textField.rows = "6";
+        textField.placeholder = "Enter your text...";
+        textField.style.marginBottom = "15px";
+        textField.style.width = "100%";
+        textField.style.padding = "12px";
+        textField.style.border = "1px solid #444";
+        textField.style.borderRadius = "8px";
+        textField.style.resize = "vertical";
+        textField.style.backgroundColor = "#3d3d3d";
+        textField.style.color = "#ffffff";
+        textField.style.fontSize = "14px";
+
+        const description = document.createElement("p");
+        description.textContent = "It's necessary to keep this tab open; otherwise, the script will pause and will resume once you return to it (this behavior is caused by the way the browser functions). Lower bound is the minimum time in milliseconds per character. Upper bound is the maximum time in milliseconds per character. A random delay value will be selected between these bounds for every character in your text, ensuring that the typing appears natural and human-like.";
+        description.style.fontSize = "14px";
+        description.style.marginBottom = "20px";
+        description.style.lineHeight = "1.5";
+        description.style.color = "#cccccc";
+
+        const randomDelayLabel = document.createElement("div");
+        randomDelayLabel.style.marginBottom = "15px";
+        randomDelayLabel.style.color = "#cccccc";
+
+        const inputContainer = document.createElement("div");
+        inputContainer.style.display = "flex";
+        inputContainer.style.gap = "15px";
+        inputContainer.style.marginBottom = "20px";
+
+        const lowerBoundLabel = document.createElement("label");
+        lowerBoundLabel.textContent = "Lower Bound (ms): ";
+        lowerBoundLabel.style.color = "#cccccc";
+
+        const lowerBoundInput = document.createElement("input");
+        lowerBoundInput.type = "number";
+        lowerBoundInput.min = "0";
+        lowerBoundInput.value = lowerBoundValue;
+        lowerBoundInput.style.padding = "8px";
+        lowerBoundInput.style.border = "1px solid #444";
+        lowerBoundInput.style.borderRadius = "6px";
+        lowerBoundInput.style.backgroundColor = "#3d3d3d";
+        lowerBoundInput.style.color = "#ffffff";
+        lowerBoundInput.style.width = "80px";
+
+        const upperBoundLabel = document.createElement("label");
+        upperBoundLabel.textContent = "Upper Bound (ms): ";
+        upperBoundLabel.style.color = "#cccccc";
+
+        const upperBoundInput = document.createElement("input");
+        upperBoundInput.type = "number";
+        upperBoundInput.min = "0";
+        upperBoundInput.value = upperBoundValue;
+        upperBoundInput.style.padding = "8px";
+        upperBoundInput.style.border = "1px solid #444";
+        upperBoundInput.style.borderRadius = "6px";
+        upperBoundInput.style.backgroundColor = "#3d3d3d";
+        upperBoundInput.style.color = "#ffffff";
+        upperBoundInput.style.width = "80px";
+
+        const confirmButton = document.createElement("button");
+        confirmButton.textContent = textField.value.trim() === "" ? "Cancel" : "Confirm";
+        confirmButton.style.padding = "10px 24px";
+        confirmButton.style.backgroundColor = "#2196f3";
+        confirmButton.style.color = "white";
+        confirmButton.style.border = "none";
+        confirmButton.style.borderRadius = "6px";
+        confirmButton.style.cursor = "pointer";
+        confirmButton.style.transition = "background-color 0.3s";
+        confirmButton.style.fontSize = "14px";
+        confirmButton.style.fontWeight = "500";
+
+        confirmButton.addEventListener("mouseenter", () => {
+            confirmButton.style.backgroundColor = "#1976d2";
         });
-        return element;
-    };
 
-    const settings = new Proxy(GM_getValue('typerSettings', {
-        speed: TYPING_SPEEDS.NORMAL,
-        humanize: true,
-        mistakes: true,
-        mistakeRate: 0.03,
-        autoCorrect: true,
-        soundEffects: false,
-        customPatterns: true,
-        maxRetries: MAX_RETRY_ATTEMPTS,
-        timeout: TYPING_TIMEOUT
-    }), {
-        set(target, key, value) {
-            target[key] = value;
-            GM_setValue('typerSettings', target);
-            return true;
-        }
+        confirmButton.addEventListener("mouseleave", () => {
+            confirmButton.style.backgroundColor = "#2196f3";
+        });
+
+        overlay.appendChild(description);
+        overlay.appendChild(textField);
+        overlay.appendChild(randomDelayLabel);
+        
+        const inputWrapper = document.createElement("div");
+        inputWrapper.style.display = "flex";
+        inputWrapper.style.gap = "15px";
+        inputWrapper.style.marginBottom = "20px";
+        
+        const lowerBoundWrapper = document.createElement("div");
+        lowerBoundWrapper.appendChild(lowerBoundLabel);
+        lowerBoundWrapper.appendChild(lowerBoundInput);
+        
+        const upperBoundWrapper = document.createElement("div");
+        upperBoundWrapper.appendChild(upperBoundLabel);
+        upperBoundWrapper.appendChild(upperBoundInput);
+        
+        inputWrapper.appendChild(lowerBoundWrapper);
+        inputWrapper.appendChild(upperBoundWrapper);
+        
+        overlay.appendChild(inputWrapper);
+        overlay.appendChild(confirmButton);
+
+        document.body.appendChild(overlay);
+
+        return new Promise((resolve) => {
+            const updateRandomDelayLabel = () => {
+                const charCount = textField.value.length;
+                const etaLowerBound = Math.ceil((charCount * parseInt(lowerBoundInput.value)) / 60000);
+                const etaUpperBound = Math.ceil((charCount * parseInt(upperBoundInput.value)) / 60000);
+                randomDelayLabel.textContent = `ETA: ${etaLowerBound} - ${etaUpperBound} minutes`;
+            };
+
+            const handleCancelClick = () => {
+                cancelTyping = true;
+                stopButton.style.display = "none";
+            };
+
+            confirmButton.addEventListener("click", () => {
+                const userInput = textField.value.trim();
+                lowerBoundValue = parseInt(lowerBoundInput.value);
+                upperBoundValue = parseInt(upperBoundInput.value);
+
+                if (userInput === "") {
+                    document.body.removeChild(overlay);
+                    return;
+                }
+
+                if (isNaN(lowerBoundValue) || isNaN(upperBoundValue) || lowerBoundValue < 0 || upperBoundValue < lowerBoundValue) return;
+
+                typingInProgress = true;
+                stopButton.style.display = "inline";
+                document.body.removeChild(overlay);
+                resolve({ userInput });
+            });
+
+            textField.addEventListener("input", () => {
+                confirmButton.textContent = textField.value.trim() === "" ? "Cancel" : "Confirm";
+                updateRandomDelayLabel();
+            });
+
+            lowerBoundInput.addEventListener("input", updateRandomDelayLabel);
+            upperBoundInput.addEventListener("input", updateRandomDelayLabel);
+            stopButton.addEventListener("click", handleCancelClick);
+        });
+    }
+
+    humanTyperButton.addEventListener("mouseenter", () => {
+        humanTyperButton.style.backgroundColor = "#f0f0f0";
     });
 
-    const typingPatterns = new Map([
-        ['standard', {delays: [50, 100, 150], variance: 0.2}],
-        ['professional', {delays: [40, 80, 120], variance: 0.15}],
-        ['expert', {delays: [30, 60, 90], variance: 0.1}]
-    ]);
+    humanTyperButton.addEventListener("mouseleave", () => {
+        humanTyperButton.style.backgroundColor = "";
+    });
 
-    const elementValidator = {
-        isValidInput(element) {
-            if (!element) return false;
-            return (
-                element instanceof HTMLInputElement ||
-                element instanceof HTMLTextAreaElement ||
-                element.isContentEditable ||
-                this.isValidIframe(element)
-            );
-        },
+    stopButton.addEventListener("mouseenter", () => {
+        stopButton.style.backgroundColor = "#f0f0f0";
+    });
 
-        isValidIframe(element) {
-            try {
-                return element.tagName === 'IFRAME' &&
-                       element.contentDocument &&
-                       element.contentDocument.body.isContentEditable;
-            } catch {
-                return false;
-            }
-        }
-    };
+    stopButton.addEventListener("mouseleave", () => {
+        stopButton.style.backgroundColor = "";
+    });
 
-    class TypingManager {
-        constructor() {
-            this.queue = [];
-            this.isProcessing = false;
-            this.abortController = new AbortController();
+    humanTyperButton.addEventListener("click", async () => {
+        if (typingInProgress) {
+            console.log("Typing in progress, please wait...");
+            return;
         }
 
-        async type(text, element) {
-            if (!elementValidator.isValidInput(element)) {
-                throw new Error('Invalid target element');
-            }
+        cancelTyping = false;
+        stopButton.style.display = "none";
 
-            const pattern = this.generateTypingPattern(text);
-            await this.executeTypingSequence(pattern, element);
-        }
+        const { userInput } = await showOverlay();
 
-        generateTypingPattern(text) {
-            const pattern = typingPatterns.get(settings.speed <= 3 ? 'standard' :
-                                             settings.speed <= 7 ? 'professional' :
-                                             'expert');
-            return text.split('').map(char => ({
-                char,
-                delay: this.calculateDelay(char, pattern)
-            }));
-        }
+        if (userInput !== "") {
+            const input = document.querySelector(".docs-texteventtarget-iframe").contentDocument.activeElement;
 
-        calculateDelay(char, pattern) {
-            const baseDelay = pattern.delays[Math.floor(Math.random() * pattern.delays.length)];
-            const variance = Math.random() * pattern.variance * 2 - pattern.variance;
-            return Math.max(MIN_DELAY, baseDelay * (1 + variance));
-        }
-
-        async executeTypingSequence(pattern, element) {
-            const signal = this.abortController.signal;
-
-            for (const {char, delay} of pattern) {
-                if (signal.aborted) break;
-
-                try {
-                    if (settings.mistakes && Math.random() < settings.mistakeRate) {
-                        await this.simulateMistake(char, element);
-                    } else {
-                        await this.insertCharacter(char, element);
+            async function simulateTyping(inputElement, char, delay) {
+                return new Promise((resolve) => {
+                    if (cancelTyping) {
+                        stopButton.style.display = "none";
+                        console.log("Typing cancelled");
+                        resolve();
+                        return;
                     }
-                    await this.delay(delay);
-                } catch (error) {
-                    if (error.name === 'AbortError') break;
-                    throw error;
-                }
-            }
-        }
 
-        async simulateMistake(correctChar, element) {
-            const mistakes = 'asdfghjklqwertyuiop';
-            const mistakeChar = mistakes[Math.floor(Math.random() * mistakes.length)];
+                    setTimeout(() => {
+                        let eventObj;
+                        if (char === "\n") {
+                            eventObj = new KeyboardEvent("keydown", {
+                                bubbles: true,
+                                key: "Enter",
+                                code: "Enter",
+                                keyCode: 13,
+                                which: 13,
+                                charCode: 13,
+                            });
+                        } else {
+                            eventObj = new KeyboardEvent("keypress", {
+                                bubbles: true,
+                                key: char,
+                                charCode: char.charCodeAt(0),
+                                keyCode: char.charCodeAt(0),
+                                which: char.charCodeAt(0),
+                            });
+                        }
 
-            await this.insertCharacter(mistakeChar, element);
-            await this.delay(150);
-            await this.deleteCharacter(element);
-            await this.delay(200);
-            await this.insertCharacter(correctChar, element);
-        }
-
-        async insertCharacter(char, element) {
-            if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-                const start = element.selectionStart;
-                const end = element.selectionEnd;
-                element.value = element.value.substring(0, start) +
-                               char +
-                               element.value.substring(end);
-                element.selectionStart = element.selectionEnd = start + 1;
-            } else if (element.isContentEditable) {
-                const selection = window.getSelection();
-                const range = selection.getRangeAt(0);
-                const textNode = document.createTextNode(char);
-                range.deleteContents();
-                range.insertNode(textNode);
-                range.setStartAfter(textNode);
-                range.setEndAfter(textNode);
-                selection.removeAllRanges();
-                selection.addRange(range);
+                        inputElement.dispatchEvent(eventObj);
+                        console.log(`Typed: ${char}, Delay: ${delay}ms`);
+                        resolve();
+                    }, delay);
+                });
             }
 
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-            if (settings.soundEffects) this.playTypeSound();
-        }
-
-        async deleteCharacter(element) {
-            if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-                const start = element.selectionStart;
-                element.value = element.value.substring(0, start - 1) +
-                               element.value.substring(start);
-                element.selectionStart = element.selectionEnd = start - 1;
-            } else if (element.isContentEditable) {
-                const selection = window.getSelection();
-                const range = selection.getRangeAt(0);
-                range.setStart(range.startContainer, range.startOffset - 1);
-                range.deleteContents();
-            }
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-
-        delay(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
-        playTypeSound() {
-            const audio = new Audio('data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjEzAAAAAAAAAAAAAAAAJAQKAAAAAAAAHjM=');
-            audio.volume = 0.2;
-            return audio.play().catch(() => {});
-        }
-
-        stop() {
-            this.abortController.abort();
-            this.abortController = new AbortController();
-        }
-    }
-
-    class UserInterface {
-        constructor() {
-            this.typingManager = new TypingManager();
-            this.popup = null;
-            this.dragOffset = { x: 0, y: 0 };
-        }
-
-        initialize() {
-            this.createStyles();
-            this.createInterface();
-            this.initializeEventListeners();
-        }
-
-        createStyles() {
-            GM_addStyle(`
-                #autoTyperElite {
-                    position: fixed;
-                    background: linear-gradient(145deg, #1a1a1a, #2a2a2a);
-                    border: 1px solid #333;
-                    border-radius: 15px;
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-                    width: 420px;
-                    z-index: 999999;
-                    color: #fff;
-                    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            async function typeStringWithRandomDelay(inputElement, string) {
+                for (let i = 0; i < string.length; i++) {
+                    const char = string[i];
+                    const randomDelay = Math.floor(Math.random() * (upperBoundValue - lowerBoundValue + 1)) + lowerBoundValue;
+                    await simulateTyping(inputElement, char, randomDelay);
                 }
 
-            `);
-        }
-
-                    GM_addStyle(`
-                .typer-header {
-                    background: linear-gradient(145deg, #2d2d2d, #383838);
-                    padding: 18px;
-                    border-radius: 15px 15px 0 0;
-                    border-bottom: 2px solid #0066cc;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    cursor: move;
-                    user-select: none;
-                }
-
-                .typer-content {
-                    padding: 20px;
-                }
-
-                .typer-textarea {
-                    width: 100%;
-                    min-height: 120px;
-                    background: #1a1a1a;
-                    border: 2px solid #333;
-                    border-radius: 10px;
-                    color: #fff;
-                    padding: 15px;
-                    font-family: 'Consolas', monospace;
-                    resize: vertical;
-                    transition: all 0.3s ease;
-                }
-
-                .typer-button {
-                    background: linear-gradient(145deg, #0066cc, #0088ff);
-                    color: white;
-                    border: none;
-                    padding: 12px 24px;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.7px;
-                    transition: all 0.2s ease;
-                    box-shadow: 0 4px 15px rgba(0,102,204,0.3);
-                }
-
-                .typer-button:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 6px 20px rgba(0,102,204,0.4);
-                }
-
-                .typer-controls {
-                    display: grid;
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 10px;
-                    margin-top: 15px;
-                }
-
-                .typer-settings {
-                    background: #1a1a1a;
-                    border-radius: 10px;
-                    padding: 15px;
-                    margin-top: 15px;
-                }
-
-                .typer-slider {
-                    width: 100%;
-                    height: 6px;
-                    background: #333;
-                    border-radius: 3px;
-                    -webkit-appearance: none;
-                    margin: 15px 0;
-                }
-
-                .typer-slider::-webkit-slider-thumb {
-                    -webkit-appearance: none;
-                    width: 18px;
-                    height: 18px;
-                    background: #0066cc;
-                    border-radius: 50%;
-                    cursor: pointer;
-                    box-shadow: 0 0 10px rgba(0,102,204,0.5);
-                }
-
-                .highlight-target {
-                    outline: 2px solid #0066cc !important;
-                    outline-offset: 2px;
-                    transition: outline 0.3s ease;
-                }
-            `);
-        }
-
-        createInterface() {
-            this.popup = safeCreateElement('div', { id: 'autoTyperElite' });
-
-            const header = safeCreateElement('div', { className: 'typer-header' });
-            header.innerHTML = `
-                <div class="typer-title">
-                    <span>⌨️ Auto Typer Elite</span>
-                    <span style="opacity: 0.7">v8.0</span>
-                </div>
-                <div class="typer-actions">
-                    <button class="typer-minimize">_</button>
-                </div>
-            `;
-
-            const content = safeCreateElement('div', { className: 'typer-content' });
-            content.innerHTML = `
-                <textarea class="typer-textarea" placeholder="Enter text to type..."></textarea>
-                <div class="typer-controls">
-                    <button class="typer-button" data-action="select">Select Target</button>
-                    <button class="typer-button" data-action="start">Start Typing</button>
-                    <button class="typer-button" data-action="pause">Pause</button>
-                    <button class="typer-button" data-action="stop">Stop</button>
-                </div>
-                <div class="typer-settings">
-                    <label>Typing Speed</label>
-                    <input type="range" class="typer-slider" min="1" max="10" value="${settings.speed}">
-                    <div class="typer-options">
-                        <label>
-                            <input type="checkbox" data-setting="humanize" ${settings.humanize ? 'checked' : ''}>
-                            Human-like Patterns
-                        </label>
-                        <label>
-                            <input type="checkbox" data-setting="mistakes" ${settings.mistakes ? 'checked' : ''}>
-                            Simulate Mistakes
-                        </label>
-                    </div>
-                </div>
-                <div class="typer-status">Ready to type...</div>
-            `;
-
-            this.popup.appendChild(header);
-            this.popup.appendChild(content);
-            document.body.appendChild(this.popup);
-
-            this.popup.style.top = '50px';
-            this.popup.style.right = '50px';
-
-            this.makeDraggable(header);
-        }
-
-        initializeEventListeners() {
-            const controls = this.popup.querySelector('.typer-controls');
-            controls.addEventListener('click', (e) => {
-                const action = e.target.dataset.action;
-                if (action) this.handleAction(action);
-            });
-
-            const settings = this.popup.querySelector('.typer-settings');
-            settings.addEventListener('change', (e) => {
-                if (e.target.dataset.setting) {
-                    this.updateSetting(e.target.dataset.setting, e.target.checked);
-                }
-                if (e.target.classList.contains('typer-slider')) {
-                    this.updateSetting('speed', parseInt(e.target.value));
-                }
-            });
-
-            document.addEventListener('keydown', (e) => {
-                if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
-                    e.preventDefault();
-                    this.toggleInterface();
-                }
-            });
-        }
-
-        handleAction(action) {
-            switch(action) {
-                case 'select':
-                    this.startElementSelection();
-                    break;
-                case 'start':
-                    this.startTyping();
-                    break;
-                case 'pause':
-                    this.pauseTyping();
-                    break;
-                case 'stop':
-                    this.stopTyping();
-                    break;
-            }
-        }
-
-        startElementSelection() {
-            isSelectorMode = true;
-            document.body.style.cursor = 'crosshair';
-
-            const selectionHandler = (e) => {
-                if (e.target === this.popup || this.popup.contains(e.target)) return;
-
-                e.preventDefault();
-                e.stopPropagation();
-
-                if (elementValidator.isValidInput(e.target)) {
-                    selectedElement = e.target;
-                    selectedElement.classList.add('highlight-target');
-                    this.updateStatus('Target selected successfully!');
-                }
-
-                document.removeEventListener('click', selectionHandler, true);
-                document.body.style.cursor = '';
-                isSelectorMode = false;
-            };
-
-            document.addEventListener('click', selectionHandler, true);
-        }
-
-        async startTyping() {
-            const text = this.popup.querySelector('.typer-textarea').value.trim();
-
-            if (!text) {
-                this.updateStatus('Please enter text to type!', 'warning');
-                return;
+                typingInProgress = false;
+                stopButton.style.display = "none";
             }
 
-            if (!selectedElement) {
-                this.updateStatus('Please select a target element first!', 'warning');
-                return;
-            }
-
-            try {
-                isTyping = true;
-                this.updateStatus('Typing in progress...', 'active');
-                await this.typingManager.type(text, selectedElement);
-                this.updateStatus('Typing completed successfully!', 'success');
-            } catch (error) {
-                this.updateStatus(`Typing failed: ${error.message}`, 'error');
-            } finally {
-                isTyping = false;
-            }
-        }
-
-        pauseTyping() {
-            if (isTyping) {
-                this.typingManager.stop();
-                isTyping = false;
-                this.updateStatus('Typing paused', 'warning');
-            }
-        }
-
-        stopTyping() {
-            this.typingManager.stop();
-            isTyping = false;
-            this.updateStatus('Typing stopped', 'info');
-        }
-
-        updateStatus(message, type = 'info') {
-            const statusEl = this.popup.querySelector('.typer-status');
-            statusEl.textContent = message;
-            statusEl.className = `typer-status ${type}`;
-        }
-
-        makeDraggable(header) {
-            let isDragging = false;
-            let currentX;
-            let currentY;
-            let initialX;
-            let initialY;
-
-            const dragStart = (e) => {
-                initialX = e.clientX - this.dragOffset.x;
-                initialY = e.clientY - this.dragOffset.y;
-
-                if (e.target === header) {
-                    isDragging = true;
-                }
-            };
-
-            const drag = (e) => {
-                if (isDragging) {
-                    e.preventDefault();
-                    currentX = e.clientX - initialX;
-                    currentY = e.clientY - initialY;
-
-                    this.dragOffset.x = currentX;
-                    this.dragOffset.y = currentY;
-
-                    requestAnimationFrame(() => {
-                        this.popup.style.transform =
-                            `translate(${currentX}px, ${currentY}px)`;
-                    });
-                }
-            };
-
-            const dragEnd = () => {
-                isDragging = false;
-            };
-
-            header.addEventListener('mousedown', dragStart);
-            document.addEventListener('mousemove', drag);
-            document.addEventListener('mouseup', dragEnd);
-        }
-
-        toggleInterface() {
-            if (this.popup) {
-                this.popup.remove();
-                this.popup = null;
-            } else {
-                this.initialize();
-            }
-        }
-    }
-
-    // Initialize the application
-    const ui = new UserInterface();
-
-    // Register menu command
-    GM_registerMenuCommand('Auto Typer Elite', () => ui.toggleInterface());
-
-    // Register global hotkey
-    document.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'z') {
-            e.preventDefault();
-            ui.toggleInterface();
+            typeStringWithRandomDelay(input, userInput);
         }
     });
-})();
+} else {
+    console.log("Document not open, Human-Typer not available.");
+}
