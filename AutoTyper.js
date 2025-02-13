@@ -2,14 +2,14 @@
 // @name         Human-Typer (Automatic) - Google Docs & Slides
 // @namespace    http://tampermonkey.net/
 // @version      1.2
-// @description  Types your text in a human-like manner so the edit history shows the progress.
-// @author       Connor M (spartan370 on github)
-// @match        http
-// @match        https://
+// @description  Types your text in a human-like manner so the edit history shows the progress. https://greasyfork.org/en/users/449798-ace-dx
+// @author       Connor M
 // @match        https://docs.google.com/*
 // @icon         https://i.imgur.com/z2gxKWZ.png
 // @grant        none
 // @license MIT
+// @downloadURL https://update.greasyfork.org/scripts/474038/Human-Typer%20%28Automatic%29%20-%20Google%20Docs%20%20Slides.user.js
+// @updateURL https://update.greasyfork.org/scripts/474038/Human-Typer%20%28Automatic%29%20-%20Google%20Docs%20%20Slides.meta.js
 // ==/UserScript==
 
 if (window.location.href.includes("docs.google.com/document/d") || window.location.href.includes("docs.google.com/presentation/d")) {
@@ -81,7 +81,7 @@ if (window.location.href.includes("docs.google.com/document/d") || window.locati
         textField.style.fontSize = "14px";
 
         const description = document.createElement("p");
-        description.textContent = "It's necessary to keep this tab open; otherwise, the script will pause and will resume once you return to it (this behavior is caused by the way the browser functions). Lower bound is the minimum time in milliseconds per character. Upper bound is the maximum time in milliseconds per character. A random delay value will be selected between these bounds for every character in your text, ensuring that the typing appears natural and human-like.";
+        description.textContent = "Lower bound = Minimum typing delay per character\nUpper bound = Maximum typing delay per character";
         description.style.fontSize = "14px";
         description.style.marginBottom = "20px";
         description.style.lineHeight = "1.5";
@@ -149,23 +149,23 @@ if (window.location.href.includes("docs.google.com/document/d") || window.locati
         overlay.appendChild(description);
         overlay.appendChild(textField);
         overlay.appendChild(randomDelayLabel);
-        
+
         const inputWrapper = document.createElement("div");
         inputWrapper.style.display = "flex";
         inputWrapper.style.gap = "15px";
         inputWrapper.style.marginBottom = "20px";
-        
+
         const lowerBoundWrapper = document.createElement("div");
         lowerBoundWrapper.appendChild(lowerBoundLabel);
         lowerBoundWrapper.appendChild(lowerBoundInput);
-        
+
         const upperBoundWrapper = document.createElement("div");
         upperBoundWrapper.appendChild(upperBoundLabel);
         upperBoundWrapper.appendChild(upperBoundInput);
-        
+
         inputWrapper.appendChild(lowerBoundWrapper);
         inputWrapper.appendChild(upperBoundWrapper);
-        
+
         overlay.appendChild(inputWrapper);
         overlay.appendChild(confirmButton);
 
