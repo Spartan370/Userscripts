@@ -2,7 +2,7 @@
 // @name         Human-Typer (Automatic) - Google Docs & Slides
 // @namespace    http://tampermonkey.net/
 // @version      1.2
-// @description  Types your text in a human-like manner so the edit history shows the progress. https://greasyfork.org/en/users/449798-ace-dx
+// @description  Types your text in a human-like manner so the edit history shows the progress.
 // @author       Connor M (spartan370 on github)
 // @match        http
 // @match        https://
