@@ -3,7 +3,7 @@
 // @namespace    https://github.com/spartan370
 // @version      5.0
 // @description  Downloads videos from any website including embedded and streaming sources
-// @author       Your Name
+// @author       Connor M
 // @match        *://*/*
 // @grant        GM_download
 // @grant        GM_xmlhttpRequest
