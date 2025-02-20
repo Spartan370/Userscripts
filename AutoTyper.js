@@ -2,14 +2,12 @@
 // @name         Human-Typer (Automatic) - Google Docs & Slides
 // @namespace    http://tampermonkey.net/
 // @version      1.2
-// @description  Types your text in a human-like manner so the edit history shows the progress. https://greasyfork.org/en/users/449798-ace-dx
+// @description  Types your text in a human-like manner so the edit history shows the progress. 
 // @author       Connor M
 // @match        https://docs.google.com/*
 // @icon         https://i.imgur.com/z2gxKWZ.png
 // @grant        none
 // @license MIT
-// @downloadURL https://update.greasyfork.org/scripts/474038/Human-Typer%20%28Automatic%29%20-%20Google%20Docs%20%20Slides.user.js
-// @updateURL https://update.greasyfork.org/scripts/474038/Human-Typer%20%28Automatic%29%20-%20Google%20Docs%20%20Slides.meta.js
 // ==/UserScript==
 
 if (window.location.href.includes("docs.google.com/document/d") || window.location.href.includes("docs.google.com/presentation/d")) {
