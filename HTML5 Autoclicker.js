@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Universal Game Autoclicker Elite
+// @name         M1K
 // @namespace    http://tampermonkey.net/
-// @version      3.4
-// @description  Professional autoclicker with minimalist design
+// @version      3.7
+// @description  Ultimate autoclicker with unlimited CPS
 // @author       Connor M
 // @match        *://*/*
 // @grant        none
@@ -12,394 +12,543 @@
     'use strict';
 
     let isActive = false;
-    let clickInterval;
-    let isCollapsed = false;
+    let isSupercharged = false;
+    let isUltraMode = false;
     let selectedElement = null;
     let clicksPerSecond = 20;
-    let gameContainer = document.querySelector('canvas') || document.body;
+    let mouseX = 0, mouseY = 0;
     let activeBatches = new Set();
+    let clickMultiplier = 1;
+    let batchWorkers = new Map();
+    let isDragging = false;
+    let dragOffset = { x: 0, y: 0 };
+    let menuScale = 1.0;
 
     const styles = `
         .clicker-controls {
             position: fixed;
-            background: linear-gradient(145deg, #2c3e50, #34495e);
-            padding: 18px;
+            top: 20px;
+            left: 20px;
+            background: linear-gradient(145deg, #400000, #200000);
+            padding: 15px;
             border-radius: 12px;
             z-index: 999999;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             color: white;
             user-select: none;
-            min-width: 280px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-            transition: all 0.3s ease;
-            backdrop-filter: blur(8px);
+            min-width: 320px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
             border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(8px);
+            transform: scale(var(--menu-scale, 1));
+            transform-origin: top left;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .clicker-controls.minimizing {
+            transform: scale(0.95);
+            opacity: 0.8;
+        }
+        .clicker-controls.closing {
+            transform: scale(0.9);
+            opacity: 0;
         }
         .clicker-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
             padding-bottom: 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
+            border-bottom: 2px solid rgba(255,255,255,0.1);
         }
         .title-section {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            font-weight: 600;
+            font-size: 15px;
+            color: #ff9999;
+            text-shadow: 0 0 10px rgba(255,0,0,0.3);
         }
-        .clicker-title {
-            font-weight: 500;
-            font-size: 14px;
-        }
-        .header-controls {
+        .coordinates-section {
             display: flex;
-            gap: 10px;
+            align-items: center;
+            gap: 8px;
         }
-        .header-button {
-            background: none;
+        .coordinates {
+            background: rgba(0,0,0,0.3);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: 'Consolas', monospace;
+            color: #ff6666;
+            border: 1px solid rgba(255,102,102,0.2);
+        }
+        .size-btn {
+            background: rgba(255,255,255,0.1);
             border: none;
-            color: #ffffff80;
-            cursor: pointer;
-            font-size: 16px;
-            padding: 0;
+            color: #ff9999;
             width: 20px;
             height: 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            transition: color 0.2s ease;
+        }
+        .size-btn:hover {
+            background: rgba(255,255,255,0.2);
+            transform: scale(1.1);
+        }`;
+
+    const styles2 = `
+        .header-controls {
+            display: flex;
+            gap: 8px;
+        }
+        .header-button {
+            background: rgba(255,255,255,0.05);
+            border: none;
+            color: #ff9999;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .header-button:hover {
+            background: rgba(255,255,255,0.1);
             color: white;
+            transform: scale(1.1);
         }
-        .clicker-content {
-            transition: max-height 0.3s ease;
-            overflow: hidden;
-        }
-        .button-container {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .toggle-button, .select-button {
+        .control-button {
             width: 100%;
-            height: 40px;
+            padding: 12px;
+            margin-bottom: 10px;
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
+            background: linear-gradient(145deg, #600000, #400000);
             color: white;
-            font-weight: 500;
             cursor: pointer;
-            transition: transform 0.2s ease, background-color 0.2s ease;
+            font-weight: 500;
+            font-size: 14px;
+            letter-spacing: 0.5px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
-        .toggle-button {
-            background: #2ecc71;
+        .control-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            background: linear-gradient(145deg, #700000, #500000);
         }
-        .select-button {
-            background: #3498db;
+        .control-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
         }
-        .toggle-button:hover, .select-button:hover {
+        .control-button.active {
+            background: linear-gradient(145deg, #800000, #600000);
+            animation: pulse 2s infinite;
+            box-shadow: 0 0 20px rgba(255,0,0,0.2);
+        }
+        .batch-controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .batch-toggle {
+            padding: 12px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(255,255,255,0.05);
+        }`;
+
+    const styles3 = `
+        .batch-toggle:hover {
+            background: rgba(0,0,0,0.3);
             transform: translateY(-1px);
         }
-        .toggle-button.active {
-            background: #e74c3c;
+        .batch-toggle.active {
+            background: rgba(128,0,0,0.3);
+            border-color: rgba(255,68,68,0.3);
         }
-        .select-button.active {
-            background: #e67e22;
+        .batch-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        .batch-toggle.active .batch-indicator {
+            background: #ff4444;
+            box-shadow: 0 0 10px #ff4444;
+            animation: glow 1.5s infinite;
         }
         .cps-control {
-            margin-top: 10px;
-            padding: 10px 0;
-            border-top: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 1px solid rgba(255,255,255,0.05);
         }
         .cps-label {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 5px;
-            font-size: 12px;
-            color: #ffffff80;
+            margin-bottom: 10px;
+            color: #ff9999;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .cps-value {
+            font-family: 'Consolas', monospace;
+            color: white;
+            background: rgba(0,0,0,0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+            min-width: 60px;
+            text-align: center;
         }
         .cps-slider {
             width: 100%;
-            height: 4px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 2px;
+            height: 6px;
             -webkit-appearance: none;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            outline: none;
+            transition: all 0.2s ease;
         }
         .cps-slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 14px;
-            height: 14px;
+            width: 16px;
+            height: 16px;
             border-radius: 50%;
-            background: #3498db;
-            cursor: pointer;
-            transition: background 0.2s ease;
-        }
-        .cps-slider::-webkit-slider-thumb:hover {
-            background: #2980b9;
-        }
-        .batch-controls {
-            display: flex;
-            gap: 10px;
-            margin-top: 12px;
-            padding-top: 12px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-        }
-        .batch-toggle {
-            background: rgba(255,255,255,0.1);
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            background: #ff4444;
             cursor: pointer;
             transition: all 0.2s ease;
+            box-shadow: 0 0 10px rgba(255,0,0,0.3);
         }
-        .batch-toggle:hover {
-            background: rgba(255,255,255,0.15);
+        .cps-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            background: #ff6666;
         }
-        .batch-toggle.active {
-            background: #3498db;
+        @keyframes glow {
+            0% { box-shadow: 0 0 5px #ff4444; }
+            50% { box-shadow: 0 0 20px #ff4444; }
+            100% { box-shadow: 0 0 5px #ff4444; }
         }
-        .batch-indicator {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.5);
-        }
-        .batch-toggle.active .batch-indicator {
-            background: #2ecc71;
-        }
-        .info-icon {
-            color: #ffffff80;
-            cursor: pointer;
-            font-size: 14px;
-            transition: color 0.2s ease;
-            text-decoration: none;
-        }
-        .info-icon:hover {
-            color: white;
-        }
-        .collapsed {
-            max-height: 0;
-            margin: 0;
-            padding: 0;
-        }
-    `;
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.98); }
+            100% { transform: scale(1); }
+        }`;
 
-    function createControls() {
-        const controls = document.createElement('div');
-        controls.className = 'clicker-controls';
-        controls.innerHTML = `
+    function simulateClick(x, y, target = null) {
+        const clickEvents = [
+            new MouseEvent('mouseover', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: x,
+                clientY: y
+            }),
+            new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: x,
+                clientY: y,
+                buttons: 1
+            }),
+            new MouseEvent('mouseup', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: x,
+                clientY: y
+            }),
+            new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: x,
+                clientY: y
+            })
+        ];
+
+        if (target) {
+            clickEvents.forEach(event => target.dispatchEvent(event));
+        } else {
+            const elementAtPoint = document.elementFromPoint(x, y);
+            if (elementAtPoint) {
+                clickEvents.forEach(event => elementAtPoint.dispatchEvent(event));
+            }
+        }
+    }
+
+    function calculateBatchOffset(batchNum, totalBatches) {
+        const radius = 10;
+        const angle = (batchNum / totalBatches) * 2 * Math.PI;
+        return {
+            x: Math.cos(angle) * radius,
+            y: Math.sin(angle) * radius
+        };
+    }
+
+    function performClick() {
+        const totalBatches = activeBatches.size || 1;
+
+        if (selectedElement) {
+            const rect = selectedElement.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            if (activeBatches.size === 0) {
+                simulateClick(centerX, centerY, selectedElement);
+            } else {
+                activeBatches.forEach(batchNum => {
+                    const offset = calculateBatchOffset(batchNum, totalBatches);
+                    simulateClick(centerX + offset.x, centerY + offset.y, selectedElement);
+                });
+            }
+        } else {
+            if (activeBatches.size === 0) {
+                simulateClick(mouseX, mouseY);
+            } else {
+                activeBatches.forEach(batchNum => {
+                    const offset = calculateBatchOffset(batchNum, totalBatches);
+                    simulateClick(mouseX + offset.x, mouseY + offset.y);
+                });
+            }
+        }
+    }
+
+    function startAutoClicker() {
+        const baseInterval = 1000 / clicksPerSecond;
+        const turboMultiplier = isUltraMode ? 2 : 1;
+        const superchargeMultiplier = isSupercharged ? 10 : 1;
+        return setInterval(performClick, baseInterval / (turboMultiplier * superchargeMultiplier));
+    }
+    function createMenu() {
+        const menu = document.createElement('div');
+        menu.className = 'clicker-controls';
+        menu.style.setProperty('--menu-scale', menuScale);
+
+        menu.innerHTML = `
             <div class="clicker-header">
                 <div class="title-section">
-                    <div class="clicker-title">Auto Clicker Elite</div>
-                    <a class="info-icon" href="https://github.com/Spartan370/Userscripts/tree/main" target="_blank" title="View Documentation">ⓘ</a>
+                    <span>M1K</span>
+                    <div class="coordinates-section">
+                        <div class="coordinates" id="mouseCoords">X: 0 Y: 0</div>
+                        <button class="size-btn" id="decreaseSize">-</button>
+                        <button class="size-btn" id="increaseSize">+</button>
+                    </div>
                 </div>
                 <div class="header-controls">
-                    <button class="header-button minimize">─</button>
-                    <button class="header-button close">✕</button>
+                    <button class="header-button minimize">−</button>
+                    <button class="header-button close">×</button>
                 </div>
             </div>
-            <div class="clicker-content">
-                <div class="button-container">
-                    <button class="toggle-button">Start</button>
-                    <button class="select-button">Select Element</button>
-                </div>
+            <div class="clicker-content" style="display: none;">
+                <button class="control-button" id="toggleClicker">Start</button>
+                <button class="control-button" id="selectTarget">Select Target</button>
                 <div class="cps-control">
                     <div class="cps-label">
-                        <span>Clicks per second</span>
-                        <span class="cps-value">${clicksPerSecond}</span>
+                        <span>Click Speed</span>
+                        <span class="cps-value">${clicksPerSecond} CPS</span>
                     </div>
-                    <input type="range" class="cps-slider" min="1" max="150" value="${clicksPerSecond}">
+                    <input type="range" class="cps-slider" min="1" max="300" value="${clicksPerSecond}">
                 </div>
+                <button class="control-button" id="ultraMode">Turbo Mode (2x)</button>
+                <button class="control-button supercharge-button">Supercharge (10x)</button>
                 <div class="batch-controls">
-                    <div class="batch-toggle" data-batch="1">
-                        <div class="batch-indicator"></div>
-                        Batch 1
-                    </div>
-                    <div class="batch-toggle" data-batch="2">
-                        <div class="batch-indicator"></div>
-                        Batch 2
-                    </div>
+                    ${Array.from({length: 6}, (_, i) => `
+                        <div class="batch-toggle" data-batch="${i + 1}">
+                            <div class="batch-indicator"></div>
+                            <span>Batch ${i + 1}</span>
+                        </div>
+                    `).join('')}
                 </div>
             </div>
         `;
-        return controls;
+        return menu;
     }
 
-    function makeDraggable(element) {
-        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
-        element.querySelector('.clicker-header').onmousedown = dragMouseDown;
+    function makeDraggable(menu) {
+        const header = menu.querySelector('.clicker-header');
+        let dragStartTime = 0;
 
-        function dragMouseDown(e) {
-            if (!e.target.classList.contains('header-button')) {
-                e.preventDefault();
-                pos3 = e.clientX;
-                pos4 = e.clientY;
-                document.onmouseup = closeDragElement;
-                document.onmousemove = elementDrag;
-                element.style.transition = 'none';
+        header.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.header-controls') || e.target.closest('.size-btn')) return;
+            isDragging = true;
+            dragStartTime = Date.now();
+            const rect = menu.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+            menu.style.transition = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const timeSinceDrag = Date.now() - dragStartTime;
+            if (timeSinceDrag > 50) {
+                menu.style.left = `${e.clientX - dragOffset.x}px`;
+                menu.style.top = `${e.clientY - dragOffset.y}px`;
             }
-        }
+        });
 
-        function elementDrag(e) {
-            e.preventDefault();
-            pos1 = pos3 - e.clientX;
-            pos2 = pos4 - e.clientY;
-            pos3 = e.clientX;
-            pos4 = e.clientY;
-
-            let newTop = element.offsetTop - pos2;
-            let newLeft = element.offsetLeft - pos1;
-
-            element.style.top = newTop + "px";
-            element.style.left = newLeft + "px";
-        }
-
-        function closeDragElement() {
-            document.onmouseup = null;
-            document.onmousemove = null;
-            element.style.transition = 'all 0.3s ease';
-        }
+        document.addEventListener('mouseup', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            menu.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+        });
     }
+    function setupEventListeners(menu) {
+        let clickInterval = null;
+        const toggleBtn = menu.querySelector('#toggleClicker');
+        const selectBtn = menu.querySelector('#selectTarget');
+        const ultraBtn = menu.querySelector('#ultraMode');
+        const superchargeBtn = menu.querySelector('.supercharge-button');
+        const cpsSlider = menu.querySelector('.cps-slider');
+        const cpsValue = menu.querySelector('.cps-value');
+        const batchToggles = menu.querySelectorAll('.batch-toggle');
+        const coordsDisplay = menu.querySelector('#mouseCoords');
+        const closeBtn = menu.querySelector('.close');
+        const minimizeBtn = menu.querySelector('.minimize');
+        const content = menu.querySelector('.clicker-content');
+        const decreaseBtn = menu.querySelector('#decreaseSize');
+        const increaseBtn = menu.querySelector('#increaseSize');
 
-    function setupControls(controls) {
-        const toggleBtn = controls.querySelector('.toggle-button');
-        const selectBtn = controls.querySelector('.select-button');
-        const minimizeBtn = controls.querySelector('.minimize');
-        const closeBtn = controls.querySelector('.close');
-        const content = controls.querySelector('.clicker-content');
-        const cpsSlider = controls.querySelector('.cps-slider');
-        const cpsValue = controls.querySelector('.cps-value');
-        const batchToggles = controls.querySelectorAll('.batch-toggle');
+        document.addEventListener('mousemove', (e) => {
+            if (!e.target.closest('.clicker-controls')) {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+                coordsDisplay.textContent = `X: ${mouseX} Y: ${mouseY}`;
+            }
+        });
+
+        selectBtn.addEventListener('click', () => {
+            document.body.style.cursor = 'crosshair';
+            const oldClick = document.onclick;
+            document.onclick = (e) => {
+                if (!e.target.closest('.clicker-controls')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    selectedElement = e.target;
+                    document.body.style.cursor = 'default';
+                    document.onclick = oldClick;
+                    selectBtn.classList.remove('active');
+                }
+            };
+            selectBtn.classList.add('active');
+        });
+
+        cpsSlider.addEventListener('input', (e) => {
+            clicksPerSecond = parseInt(e.target.value);
+            cpsValue.textContent = `${clicksPerSecond} CPS`;
+            if (isActive) {
+                clearInterval(clickInterval);
+                clickInterval = startAutoClicker();
+            }
+        });
 
         toggleBtn.addEventListener('click', () => {
             isActive = !isActive;
             toggleBtn.textContent = isActive ? 'Stop' : 'Start';
             toggleBtn.classList.toggle('active');
-            handleClicking();
-        });
 
-        selectBtn.addEventListener('click', () => {
-            selectBtn.classList.toggle('active');
-            startElementSelection(selectBtn);
-        });
-
-        minimizeBtn.addEventListener('click', () => {
-            isCollapsed = !isCollapsed;
-            content.classList.toggle('collapsed');
-            minimizeBtn.textContent = isCollapsed ? '╋' : '─';
-        });
-
-        closeBtn.addEventListener('click', () => {
-            controls.remove();
-            if (isActive) handleClicking();
-        });
-
-        cpsSlider.addEventListener('input', (e) => {
-            clicksPerSecond = parseInt(e.target.value);
-            updateClickRate();
+            if (isActive) {
+                clickInterval = startAutoClicker();
+            } else {
+                clearInterval(clickInterval);
+            }
         });
 
         batchToggles.forEach(toggle => {
             toggle.addEventListener('click', () => {
-                toggle.classList.toggle('active');
                 const batchNum = parseInt(toggle.dataset.batch);
+                toggle.classList.toggle('active');
                 if (toggle.classList.contains('active')) {
                     activeBatches.add(batchNum);
                 } else {
                     activeBatches.delete(batchNum);
                 }
-                updateClickRate();
             });
         });
 
-        function updateClickRate() {
-            const totalBatches = activeBatches.size || 1;
-            const effectiveCPS = clicksPerSecond * totalBatches;
-            cpsValue.textContent = `${effectiveCPS} (${totalBatches}x)`;
+        ultraBtn.addEventListener('click', () => {
+            isUltraMode = !isUltraMode;
+            ultraBtn.classList.toggle('active');
             if (isActive) {
-                handleClicking();
+                clearInterval(clickInterval);
+                clickInterval = startAutoClicker();
             }
-        }
-    }
+        });
 
-    function startElementSelection(selectBtn) {
-        const handleSelection = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            selectedElement = e.target;
-            selectBtn.classList.remove('active');
-            selectBtn.textContent = 'Element Selected';
-            document.removeEventListener('click', handleSelection, true);
-        };
+        superchargeBtn.addEventListener('click', () => {
+            isSupercharged = !isSupercharged;
+            superchargeBtn.classList.toggle('active');
+            if (isActive) {
+                clearInterval(clickInterval);
+                clickInterval = startAutoClicker();
+            }
+        });
 
-        document.addEventListener('click', handleSelection, true);
-    }
+        minimizeBtn.addEventListener('click', () => {
+            content.style.display = content.style.display === 'none' ? 'block' : 'none';
+            menu.classList.add('minimizing');
+            setTimeout(() => menu.classList.remove('minimizing'), 300);
+        });
 
-    function handleClicking() {
-        if (clickInterval) {
-            clearInterval(clickInterval);
-        }
+        closeBtn.addEventListener('click', () => {
+            menu.classList.add('closing');
+            setTimeout(() => {
+                if (isActive) clearInterval(clickInterval);
+                menu.remove();
+            }, 300);
+        });
 
-        if (isActive) {
-            const totalBatches = activeBatches.size || 1;
-            const interval = 1000 / (clicksPerSecond * totalBatches);
-            
-            clickInterval = setInterval(() => {
-                for (let i = 0; i < totalBatches; i++) {
-                    if (selectedElement) {
-                        const rect = selectedElement.getBoundingClientRect();
-                        simulateClick(rect.left + rect.width/2, rect.top + rect.height/2, selectedElement);
-                    } else {
-                        simulateClick(mouseX, mouseY);
-                    }
-                }
-            }, interval);
-        }
-    }
+        decreaseBtn.addEventListener('click', () => {
+            if (menuScale > 0.5) {
+                menuScale -= 0.1;
+                menu.style.setProperty('--menu-scale', menuScale);
+            }
+        });
 
-    function simulateClick(x, y, target) {
-        const events = ['mousedown', 'mouseup', 'click'];
-        const options = {
-            bubbles: true,
-            cancelable: true,
-            view: window,
-            clientX: x,
-            clientY: y,
-            screenX: x,
-            screenY: y,
-            button: 0,
-            buttons: 1
-        };
-
-        events.forEach(eventType => {
-            const event = new MouseEvent(eventType, options);
-            (target || document.elementFromPoint(x, y))?.dispatchEvent(event);
+        increaseBtn.addEventListener('click', () => {
+            if (menuScale < 2.0) {
+                menuScale += 0.1;
+                menu.style.setProperty('--menu-scale', menuScale);
+            }
         });
     }
 
-    let mouseX = 0, mouseY = 0;
-    document.addEventListener('mousemove', (e) => {
-        mouseX = e.clientX;
-        mouseY = e.clientY;
-    });
-
-    function addStyles() {
-        const styleSheet = document.createElement('style');
-        styleSheet.textContent = styles;
-        document.head.appendChild(styleSheet);
-    }
-
     function init() {
-        addStyles();
-        const controls = createControls();
-        document.body.appendChild(controls);
-        makeDraggable(controls);
-        setupControls(controls);
+        const styleSheet = document.createElement('style');
+        styleSheet.textContent = styles + styles2 + styles3;
+        document.head.appendChild(styleSheet);
+
+        const menu = createMenu();
+        document.body.appendChild(menu);
+        makeDraggable(menu);
+        setupEventListeners(menu);
     }
 
     init();
